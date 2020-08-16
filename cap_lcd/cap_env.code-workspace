@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"v4l2_driver.h": "c",
+			"time.h": "c",
+			"unistd.h": "c"
+		}
+	}
+}
