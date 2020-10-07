@@ -5,7 +5,7 @@ int main(int argc,char** argv)
     int cap_fd;
     int ret;
     int frame_ct = 20;
-    ret = Cap_Init("/dev/video0",&cap_fd);
+    ret = Cap_Init(argv[1],&cap_fd);
     if(ret)
     {
         //ret = Acquire_date(&cap_fd);

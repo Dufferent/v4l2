@@ -5,8 +5,9 @@ u_int8_t map_stat = 0;
 u_int8_t req_stat = 0;
 u_int8_t que_stat = 0;
 
-char* date[COUNT] = {0};
-char recbuf[IMG_WIDTH*IMG_HEIGHT*3] = {0};
+unsigned char* date[COUNT] = {0};
+unsigned char recbuf[IMG_WIDTH*IMG_HEIGHT*3] = {0};
+unsigned int ret_get[SCR_WIDTH*SCR_HEIGHT] = {0};
 
 bmphead bmph;
 bmpbody bmpb;
@@ -40,8 +41,8 @@ u_int8_t Cap_Init(char* dev,int *cap)
     if(-1 == ret)
     {
         printf("设置摄像头输出图片帧格式出错\r\n");
-        //close(*cap);
-        //return false;
+        close(*cap);
+        return false;
     }
     /* 第三部，获取摄像头格式信息，检查设置是否成功 */
     ret = ioctl(*cap,VIDIOC_G_FMT,&cap_format);
@@ -54,8 +55,8 @@ u_int8_t Cap_Init(char* dev,int *cap)
     if(-1 == ret)
     {
         printf("get cap info failed!\r\n");
-        //close(*cap);
-        //return false;
+        close(*cap);
+        return false;
     }
 
     if(cap_format.fmt.pix.width != IMG_WIDTH)
@@ -75,7 +76,7 @@ u_int8_t Cap_Init(char* dev,int *cap)
     {
         printf("capout height set ok!\r\n");
     }
-    if(cap_format.fmt.pix.pixelformat != V4L2_PIX_FMT_YUYV)
+    if(cap_format.fmt.pix.pixelformat != v4l2_fourcc('Y', 'U', 'Y', '2'))
     {
         printf("capout FMT set failed!!\r\n");
     } 
@@ -416,4 +417,116 @@ void BMP_INIT(bmphead *head,bmpbody *body)
     head->bfReserved=0;
     head->bfSize= 54 + (body->biSizeImage);
     head->bfType=0x4d42;
+}
+
+
+u_int8_t LCD_SHOW(int *cap,int fb,unsigned int *paddr)
+{
+    int ret;
+    //FILE *ptr;
+    struct v4l2_buffer current_buf;
+    struct timeval tv;
+    fd_set fds;
+
+    
+    FD_ZERO(&fds);
+    FD_SET(*cap, &fds);
+    tv.tv_sec = 2;//time out
+	tv.tv_usec = 0;
+	ret = select(*cap+1, &fds, NULL, NULL, &tv);//判断摄像头是否准备好，tv是定时
+    if(-1 == ret){
+        printf("select erro! \n");
+	}
+	else if(0 == ret){
+		printf("select timeout! \n");//超时
+		return 1;
+	}
+    
+
+    char filename[50] = {0};
+    //static int i = 0;
+    static unsigned int index = 0;
+    
+    __bzero(&current_buf,sizeof(current_buf));
+    current_buf.index = index;
+    current_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    //imgbuf[index].index = index;
+
+    
+    index++;
+    if(index == COUNT)
+        index = 0;
+
+    ret = ioctl(*cap,VIDIOC_DQBUF,&current_buf);
+    if(-1 == ret)
+    {
+        printf("弹出缓冲区失败!\r\n");
+        close(*cap);
+        return false;
+    }
+    //sprintf(filename,"%s%d%s","./img_out/cap_",i,".bmp");
+    //i++;
+
+    //ptr = fopen(filename,"a+");
+    /*
+    if(NULL == ptr)
+    {
+        printf("file operation failed!\r\n");
+        close(*cap);
+        fclose(ptr);
+        return false;
+    }
+    */
+    yuyv_to_rgb888(date[current_buf.index]);
+    process_get(recbuf);
+    draw_bmp(paddr,ret_get);
+    /*
+    BMP_INIT(&bmph,&bmpb);
+    fwrite(&bmph,14,1,ptr);
+    fwrite(&bmpb,40,1,ptr);
+    fwrite(recbuf,current_buf.bytesused*3,1,ptr);
+    fclose(ptr);
+    */
+
+    ret = ioctl(*cap,VIDIOC_QBUF,&current_buf);
+    if(-1 == ret)
+    {
+        printf("缓冲区加入图像队列失败!\r\n");
+        //que_stat = -1;
+        close(*cap);
+        return false;
+    }
+    return true;
+}
+
+void draw_point(unsigned int *p, unsigned int color, int pos_x, int pos_y)
+{
+	//memcpy(p+pos_x+pos_y*800, &color, 4);
+	*(p+pos_x+SCR_WIDTH*pos_y) = color;
+}
+
+void draw_bmp(unsigned int *p,unsigned int bmp[])
+{
+	for(int j = 0; j<SCR_HEIGHT; j++)
+	for(int i = 0; i<SCR_WIDTH; i++)
+	{
+		draw_point(p,bmp[i+SCR_WIDTH*j],i,j);
+	}
+}
+
+void process_get(unsigned char addr[])
+{
+	int j = 0;
+    for(int k = 0;k<SCR_HEIGHT;k++)
+	for(int i = 0;i<SCR_WIDTH;i++)
+	{
+        if( (i>=IMG_WIDTH) || (k>=IMG_HEIGHT) )
+            ret_get[i+k*SCR_WIDTH] = 0;
+        else
+        {
+		    ret_get[i+k*SCR_WIDTH] = (unsigned int)(addr[j]*256*256 + addr[j+1]*256 + addr[j+2]);
+            j+=3;
+        }
+	}
 }
