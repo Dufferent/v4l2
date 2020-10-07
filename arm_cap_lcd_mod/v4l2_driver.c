@@ -8,6 +8,7 @@ u_int8_t que_stat = 0;
 unsigned char* date[COUNT] = {0};
 unsigned char recbuf[IMG_WIDTH*IMG_HEIGHT*3] = {0};
 unsigned int ret_get[SCR_WIDTH*SCR_HEIGHT] = {0};
+unsigned short recbuf_yuyv[IMG_WIDTH*IMG_HEIGHT*2] = {0};
 
 bmphead bmph;
 bmpbody bmpb;
@@ -76,7 +77,7 @@ u_int8_t Cap_Init(char* dev,int *cap)
     {
         printf("capout height set ok!\r\n");
     }
-    if(cap_format.fmt.pix.pixelformat != v4l2_fourcc('Y', 'U', 'Y', '2'))
+    if(cap_format.fmt.pix.pixelformat != v4l2_fourcc('Y', 'U', 'Y', 'V'))
     {
         printf("capout FMT set failed!!\r\n");
     } 
@@ -446,7 +447,6 @@ u_int8_t LCD_SHOW(int *cap,int fb,unsigned int *paddr)
     char filename[50] = {0};
     //static int i = 0;
     static unsigned int index = 0;
-    
     __bzero(&current_buf,sizeof(current_buf));
     current_buf.index = index;
     current_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -478,7 +478,8 @@ u_int8_t LCD_SHOW(int *cap,int fb,unsigned int *paddr)
         return false;
     }
     */
-    yuyv_to_rgb888(date[current_buf.index]);
+    //yuyv_to_rgb888(date[current_buf.index]);
+    yuyv_to_rgb888_with_gray(date[current_buf.index]);
     process_get(recbuf);
     draw_bmp(paddr,ret_get);
     /*
@@ -525,8 +526,76 @@ void process_get(unsigned char addr[])
             ret_get[i+k*SCR_WIDTH] = 0;
         else
         {
-		    ret_get[i+k*SCR_WIDTH] = (unsigned int)(addr[j]*256*256 + addr[j+1]*256 + addr[j+2]);
+		    ret_get[i+k*SCR_WIDTH] = (unsigned int)( (addr[j]<<16) | (addr[j+1]<<8) | addr[j+2]);
             j+=3;
         }
 	}
+}
+
+unsigned char gray_deal(char r,char g,char b)
+{
+    unsigned char gray;
+    gray = (r+g+b)/3;
+    return gray;
+}
+
+#define Td 128  //阈值
+
+void yuyv_to_rgb888_with_gray(char *yuyv)
+{
+    int pix;
+    int rgb_pix = 0;
+    unsigned char y1,u1,y2,v1;
+    int r1,g1,b1,r2,g2,b2;
+    unsigned char gray1,gray2;
+    //像素空间
+    for(pix=0;pix<IMG_WIDTH*IMG_HEIGHT*2;pix+=4)
+        {
+            y1 = yuyv[pix];
+            u1 = yuyv[pix + 1];
+            y2 = yuyv[pix + 2];
+            v1 = yuyv[pix + 3];
+
+            /* to rgb 24 */
+            r1 = y1 + 1.370705*(v1-128);
+            g1 = y1 - 0.698001*(v1-128) - 0.337633*(u1-128);
+            b1 = y1 + 1.732446*(u1-128);
+            r2 = y2 + 1.370705*(v1-128);
+            g2 = y2 - 0.698001*(v1-128) - 0.337633*(u1-128);
+            b2 = y2 + 1.732446*(u1-128);
+
+            r1 = (RGB24_MAX(r1));
+            g1 = (RGB24_MAX(g1));
+            b1 = (RGB24_MAX(b1));
+            r2 = (RGB24_MAX(r2));
+            g2 = (RGB24_MAX(g2));
+            b2 = (RGB24_MAX(b2));
+            r1 = (RGB24_MIN(r1));
+            g1 = (RGB24_MIN(g1));
+            b1 = (RGB24_MIN(b1));
+            r2 = (RGB24_MIN(r2));
+            g2 = (RGB24_MIN(g2));
+            b2 = (RGB24_MIN(b2));
+
+            /* 灰度处理 */
+            gray1 = gray_deal(r1,g1,b1);
+            if(gray1 < Td)
+                gray1 = 0;
+            else
+                gray1 = 255;
+            
+            gray2 = gray_deal(r2,g2,b2);
+            if(gray2 < Td)
+                gray2 = 0;
+            else
+                gray2 = 255;
+
+            recbuf[rgb_pix]     = gray1;
+            recbuf[rgb_pix + 1] = gray1;
+            recbuf[rgb_pix + 2] = gray1;
+            recbuf[rgb_pix + 3] = gray2;
+            recbuf[rgb_pix + 4] = gray2;
+            recbuf[rgb_pix + 5] = gray2;
+            rgb_pix+=6;
+        }
 }

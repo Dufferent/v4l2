@@ -25,12 +25,12 @@
 #include "linux/v4l2-subdev.h"
 
 /* World Define */
-#define IMG_WIDTH  1024
-#define IMG_HEIGHT 600
+#define IMG_WIDTH  640
+#define IMG_HEIGHT 480
 
 #define SCR_WIDTH  1024
 #define SCR_HEIGHT 600
-#define SCR_DEEP   4
+#define SCR_DEEP   4     //正点原子的7寸TFT色深 为 24 -> 3B
 
 #define IMG_FMT  V4L2_PIX_FMT_YUYV;
 #define COUNT 4//缓冲区个数
@@ -86,5 +86,8 @@ void process_get(unsigned char addr[]);
 void draw_bmp(unsigned int *p,unsigned int bmp[]);
 void draw_point(unsigned int *p, unsigned int color, int pos_x, int pos_y);
 u_int8_t LCD_SHOW(int *cap,int fb,unsigned int *paddr);
+
+unsigned char gray_deal(char r,char g,char b);
+void yuyv_to_rgb888_with_gray(char *yuyv);
 
 #endif
