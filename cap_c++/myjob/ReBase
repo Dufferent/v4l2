@@ -1,0 +1,183 @@
+#define FIELD_PIX_MAX(x) ((x>255)?(255):x)
+#define FIELD_PIX_MIN(x) ((x<0)?(0):x)
+
+struct mybuf{
+    u8 *(start[BUF_CT]);
+    u32 index;
+};
+
+void yuyv_2_rgb888(u8 y1,u8 u,u8 y2,u8 v,u32 *pix32,u32 ct)
+{
+    u8 r1,g1,b1,r2,g2,b2;
+    r1 = 1.164*(y1-16) + 1.159*(v-128); 
+    g1 = 1.164*(y1-16) - 0.380*(u-128)+ 0.813*(v-128); 
+    b1 = 1.164*(y1-16) + 2.018*(u-128); 
+
+    r2 = 1.164*(y2-16) + 1.159*(v-128); 
+    g2 = 1.164*(y2-16) - 0.380*(u-128)+ 0.813*(v-128); 
+    b2 = 1.164*(y2-16) + 2.018*(u-128); 
+
+    r1 = FIELD_PIX_MAX(r1);
+    r1 = FIELD_PIX_MIN(r1);
+    g1 = FIELD_PIX_MAX(g1);
+    g1 = FIELD_PIX_MIN(g1);
+    b1 = FIELD_PIX_MAX(b1);
+    b1 = FIELD_PIX_MIN(b1);
+    r2 = FIELD_PIX_MAX(r2);
+    r2 = FIELD_PIX_MIN(r2);
+    g2 = FIELD_PIX_MAX(g2);
+    g2 = FIELD_PIX_MIN(g2);
+    b2 = FIELD_PIX_MAX(b2);
+    b2 = FIELD_PIX_MIN(b2);
+
+    pix32[ct] = (r1<<16)|(g1<<8)|b1;
+    pix32[ct+1] = (r2<<16)|(g2<<8)|b2;
+}
+//yuyv:4:2:2
+void PIXFMT_CONVERT(u8 *addr,u32 *rgbbuf)
+{
+    u8 y1,u,y2,v;
+    u32 ct32 = 0;
+    for(int ii=0;ii<CAP_WIDTH*CAP_HEIGHT*2;)
+    {
+        y1 = addr[ii];
+        u  = addr[ii+1];
+        y2 = addr[ii+2];
+        v  = addr[ii+3];
+        ii+=4;
+        yuyv_2_rgb888(y1,u,y2,v,rgbbuf,ct32);
+        ct32 += 2;
+    }
+    printf("rgb buf get!\r\n");
+}
+
+void Base()
+{
+    int cfd;
+    int ret;
+    struct v4l2_format fmt;
+    struct v4l2_requestbuffers rbuf;
+    struct v4l2_buffer buf;
+    struct mybuf mbuf;
+    u32 rgb[CAP_WIDTH*CAP_HEIGHT]={0};
+    cfd = open(argv[2],O_RDWR);
+    if(cfd < 0)
+    {
+        printf("cap open failed!\r\n");
+        exit(-1);
+    }
+    //step1:设置摄像头格式 <必须要先进行设置>
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt.fmt.pix.height = CAP_HEIGHT;
+    fmt.fmt.pix.width  = CAP_WIDTH;
+    fmt.fmt.pix.field  = V4L2_FIELD_ALTERNATE; 
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+    ret = ioctl(cfd,VIDIOC_S_FMT,&fmt);
+    if(ret == -1)
+    {
+        printf("cap set fmt failed!\r\n");
+        close(cfd);
+        exit(-1);
+    }
+    //step2:检查摄像头格式设置  <一定要和设置的FMT同一个结构体地址>
+    ret = ioctl(cfd,VIDIOC_G_FMT,&fmt);
+    if(ret == -1)
+    {
+        printf("cap get fmt failed!\r\n");
+        close(cfd);
+        exit(-1);
+    }
+    printf("w:\t%d\r\n",fmt.fmt.pix.width);
+    printf("h:\t%d\r\n",fmt.fmt.pix.height);
+    printf("pixfmt:\t%s\r\n",(fmt.fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV)?("true"):("false"));
+
+    //step3:申请缓冲区
+    rbuf.type  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    rbuf.count = BUF_CT;
+    rbuf.memory = V4L2_MEMORY_MMAP;
+    ret = ioctl(cfd,VIDIOC_REQBUFS,&rbuf);
+    if(ret == -1)
+    {
+        printf("cap rquest buf failed!\r\n");
+        close(cfd);
+        exit(-1);
+    }
+
+    //step4：将缓冲区列队 <注：以下所有的缓冲区都要保持一致>
+    for(int i=0;i<BUF_CT;i++)
+    {
+        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf.memory = V4L2_MEMORY_MMAP;
+        buf.index = i;
+        ret = ioctl(cfd,VIDIOC_QUERYBUF,&buf);
+        if(ret == -1)
+        {
+            printf("cap querry %d号 buf failed!\r\n",i);
+            close(cfd);
+            exit(-1);
+        }
+        printf("buf_size:%2d\r\n",buf.bytesused);
+        printf("buf_lenth:%2d\r\n",buf.length);
+        mbuf.start[i] = (u8*)mmap(NULL,buf.length,PROT_READ,MAP_SHARED,cfd,buf.m.offset);
+        if(mbuf.start[i] == NULL)
+            printf("%d号缓冲区映射失败！\r\n",i);
+    }
+
+    //step5:缓冲区入队
+    for(int i=0;i<BUF_CT;i++)
+    {
+        buf.index = i;
+        ret = ioctl(cfd,VIDIOC_QBUF,&buf);
+        if(ret == -1)
+        {
+            printf("cap queue %d号 buf failed!\r\n",i);
+            close(cfd);
+            exit(-1);
+        }
+    }
+
+    //step6:开启摄像头
+    static int on = 1;
+    ret = ioctl(cfd,VIDIOC_STREAMON,&on);
+    if(ret == -1)
+    {
+        printf("cap start failed!\r\n");
+        close(cfd);
+        exit(-1);
+    }
+
+    //step7:弹出缓冲区
+    ret = ioctl(cfd,VIDIOC_DQBUF,&buf);
+    if(ret == -1)
+    {
+        printf("cap dqueue buf failed!\r\n");
+        close(cfd);
+        exit(-1);
+    }
+
+    //step8:读出数据
+    PIXFMT_CONVERT(mbuf.start[buf.index],rgb);
+
+    //step9:重新入队
+    ret = ioctl(cfd,VIDIOC_QBUF,&buf);
+    if(ret == -1)
+    {
+        printf("cap dqueue buf failed!\r\n");
+        close(cfd);
+        exit(-1);
+    }
+
+    mylcd.Fill_Graph(rgb,CAP_WIDTH,CAP_HEIGHT);
+
+    //step10:关闭摄像头
+    static int off = 0;
+    ret = ioctl(cfd,VIDIOC_STREAMOFF,&off);
+    if(ret == -1)
+    {
+        printf("cap off failed!\r\n");
+        close(cfd);
+        exit(-1);
+    }
+    close(cfd);
+
+}

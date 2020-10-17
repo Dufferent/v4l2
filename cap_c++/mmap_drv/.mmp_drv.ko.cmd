@@ -1,0 +1,1 @@
+cmd_/home/ts/Downloads/GEC6818模拟器/mmap_drv/mmp_drv.ko := ld -r -m elf_x86_64 -z max-page-size=0x200000 -T ./scripts/module-common.lds --build-id  -o /home/ts/Downloads/GEC6818模拟器/mmap_drv/mmp_drv.ko /home/ts/Downloads/GEC6818模拟器/mmap_drv/mmp_drv.o /home/ts/Downloads/GEC6818模拟器/mmap_drv/mmp_drv.mod.o ;  true
