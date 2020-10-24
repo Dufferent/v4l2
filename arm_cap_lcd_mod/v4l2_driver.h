@@ -89,5 +89,6 @@ u_int8_t LCD_SHOW(int *cap,int fb,unsigned int *paddr);
 
 unsigned char gray_deal(char r,char g,char b);
 void yuyv_to_rgb888_with_gray(char *yuyv);
+void process_get_2_565(unsigned char addr[]);
 
 #endif

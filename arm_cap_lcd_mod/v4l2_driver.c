@@ -478,9 +478,10 @@ u_int8_t LCD_SHOW(int *cap,int fb,unsigned int *paddr)
         return false;
     }
     */
-    //yuyv_to_rgb888(date[current_buf.index]);
-    yuyv_to_rgb888_with_gray(date[current_buf.index]);
-    process_get(recbuf);
+    yuyv_to_rgb888(date[current_buf.index]);
+    //yuyv_to_rgb888_with_gray(date[current_buf.index]);
+    //process_get(recbuf);
+    process_get_2_565(recbuf);
     draw_bmp(paddr,ret_get);
     /*
     BMP_INIT(&bmph,&bmpb);
@@ -598,4 +599,25 @@ void yuyv_to_rgb888_with_gray(char *yuyv)
             recbuf[rgb_pix + 5] = gray2;
             rgb_pix+=6;
         }
+}
+
+void process_get_2_565(unsigned char addr[])
+{
+	int j = 0;
+    for(int k = 0;k<SCR_HEIGHT;k++)
+	for(int i = 0;i<SCR_WIDTH/2;i++)
+	{
+        if( (i*2>=IMG_WIDTH) || (k>=IMG_HEIGHT) )
+            ret_get[i+k*SCR_WIDTH] = 0;
+        else
+        {
+		    ret_get[i+k*SCR_WIDTH] = (unsigned int)( ((addr[j]>>3)<<11) 
+                                                    | ((addr[j+1]>>2)<<5) 
+                                                    | ((addr[j+2]>>3)<<0)
+                                                    | ((addr[j+3]>>3)<<27) 
+                                                    | ((addr[j+4]>>2)<<21) 
+                                                    | ((addr[j+5]>>3)<<16) );
+            j+=6;
+        }
+	}
 }
