@@ -1,0 +1,1 @@
+cmd_/home/ts/Downloads/GEC6818模拟器/event_drv/event_drv.ko := ld -r -m elf_x86_64 -z max-page-size=0x200000 -T ./scripts/module-common.lds --build-id  -o /home/ts/Downloads/GEC6818模拟器/event_drv/event_drv.ko /home/ts/Downloads/GEC6818模拟器/event_drv/event_drv.o /home/ts/Downloads/GEC6818模拟器/event_drv/event_drv.mod.o ;  true
